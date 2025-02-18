@@ -98,7 +98,7 @@ x_opt1, evals1, points1 = intervalo_dalijimo_pusiau(f, 0, 10, 1e-4, a, b)
 x_opt2, evals2, points2 = auksinio_pjuvio_algoritmas(f, 0, 10, 1e-4, a, b)
 x_opt3, iterations3, points3 = niutono_metodas(5, 1e-4, a, b)
 
-# Rezultatų lentelė
+# Rezultatu lentele
 results = pd.DataFrame({
     "Metodas": ["Intervalo dalijimas pusiau", "Auksinis pjūvis", "Niutono metodas"],
     "Minimumo taškas (x)": [x_opt1, x_opt2, x_opt3],
@@ -120,13 +120,17 @@ isvestine = sp.lambdify(x_sym, isvestine)
 y_isvestine = isvestine(x)
 
 plt.figure(figsize=(10, 6))
-plt.plot(x, y_isvestine, color='black', label="f'(x)")  
-plt.scatter(points1, f(np.array(points1), a, b), color='green', label="Intervalo dalijimas")
-plt.scatter(points2, f(np.array(points2), a, b), color='blue', label="Auksinis pjūvis")
-plt.scatter(points3, f(np.array(points3), a, b), color='black', label="Niutono metodas")
+# braizo pagr. funkcija
+plt.plot(x, y, color='red', label="f(x)")
+# braizo isvestine
+plt.plot(x, y_isvestine, color='blue', label="f'(x)") 
+# pridedami taskai 
+plt.scatter(points1, f(np.array(points1), a, b), color='blue', label="Intervalo dalijimas")
+plt.scatter(points2, f(np.array(points2), a, b), color='red', label="Auksinis pjūvis")
+plt.scatter(points3, f(np.array(points3), a, b), color='green', label="Niutono metodas")
 plt.legend()
 plt.xlabel("x")
 plt.ylabel("f(x)")
 plt.title("Optimizavimo metodų bandymo taškai")
 plt.grid()
-plt.show()
+plt.show()    
