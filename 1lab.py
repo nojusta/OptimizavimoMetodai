@@ -89,14 +89,24 @@ def niutono_metodas(x0, eps, a, b):
             return x1, iterations, points
         x0 = x1
 
-# parametrai gaunami is studento knygeles (cia pvz. a = 4, b = 5)
+# Studento knygeles nr “1*1**ab” 
 a = 4
-b = 5
+b = 5  
+
+# Patikriname ar reikia tvarkyti b
+b = tvarkyti_b(b)
+print(f"Naudojami parametrai: a = {a}, b = {b}")
+
 
 # Kvietimai
 x_opt1, evals1, points1 = intervalo_dalijimo_pusiau(f, 0, 10, 1e-4, a, b)
 x_opt2, evals2, points2 = auksinio_pjuvio_algoritmas(f, 0, 10, 1e-4, a, b)
 x_opt3, iterations3, points3 = niutono_metodas(5, 1e-4, a, b)
+
+# pandas rodymo parinktys
+pd.set_option('display.max_columns', None)  # Rodyti visus stulpelius
+pd.set_option('display.width', None)        # Nerodyti daugtaskiu
+pd.set_option('display.float_format', lambda x: '%.6f' % x)  # 6 skaičiai po kablelio
 
 # Rezultatu lentele
 results = pd.DataFrame({
@@ -133,4 +143,4 @@ plt.xlabel("x")
 plt.ylabel("f(x)")
 plt.title("Optimizavimo metodų bandymo taškai")
 plt.grid()
-plt.show()    
+plt.show()
