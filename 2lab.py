@@ -1,440 +1,398 @@
-import matplotlib
-matplotlib.use('TkAgg')
-import numpy as np
+import numpy
 import matplotlib.pyplot as plt
-import pandas as pd
+from tabulate import tabulate
 
-# tikrina ar fiziskai imanoma deze sudaryti (ar z yra teigiamas)
-def ar_leistinas(x, y):
-    z = 1 - x - y
-    return x > 1e-10 and y > 1e-10 and z > 1e-10
+def gradientas(x, y):
+    grad_x = -y/8*(2*x+y-1)
+    grad_y = -x/8*(x+2*y-1)
+    return grad_x, grad_y
 
-# skaiciuoja neigiama dezes turio kvadrata su (nes ieskome maksimumo) ir skaiciuoja iskvietimu kieki
-def tikslo_funkcija(X, skaitliukas=[0]):
-    """Neigiamas dėžės tūrio kvadratas su vienetiniu paviršiaus plotu"""
-    skaitliukas[0] += 1
-    x, y = X
-    z = 1 - x - y
-    if not (x > 0 and y > 0 and z > 0):
-        return np.inf
-    return -(x * y * z)  # Minimize -V (V = x*y*z for half-areas)
+# Gradientinio nusileidimo algoritmas
+def GradNusileidimas(gradientas, x0y0, zingsnis):
+    e = 1e-4 # e - tolerancija, kuri nurodo, kada sustoti
+    iteracijos = 0
+    xy = x0y0 # xy - dabartinė taško pozicija
+    max_iter = 100
+    path = [xy]  # Sekti kelią
 
-# tikslo funkcijos gradiento skaiciavimas (dalines isvestines)
-def gradientas(X, skaitliukas=[0]):
-    """Analitinis tikslo funkcijos gradientas"""
-    skaitliukas[0] += 1
-    x, y = X
-    z = 1 - x - y
-    if not (x > 0 and y > 0 and z > 0):
-        return np.array([np.inf, np.inf])
-    df_dx = -y * z + x * y
-    df_dy = -x * z + x * y
-    return np.array([df_dx, df_dy])
+    while iteracijos < max_iter:
+        iteracijos += 1
 
-# seka, vizualizuoja optimizavimo metodo kelia 3D ir 2D grafikuose
-def sekti_optimizacija(f, metodas, x0, metodo_pavadinimas, spalva, zymeklis, ax3d, ax2d):
-    """
-    Seka optimizacijos kelią ir atvaizduoja jį 3D ir 2D grafikuose
-    """
-    # Inicializuojame istorijos sekimą
-    x_istorija = [np.array(x0, dtype=float)]
-    z_istorija = [-f(x0) if np.isfinite(f(x0)) else 0]
+        z = gradientas.kviesti(xy)
+        x_laikinas = xy[0] + zingsnis * z[0]
+        y_laikinas = xy[1] + zingsnis * z[1]
+        xy_laikinas = (x_laikinas, y_laikinas)
+        path.append(xy_laikinas)
 
-    # Apvalkalas funkcijoms, kad galėtume sekti istoriją
-    def apvalkalas_funkcijai(X):
-        val = f(X)
-        if np.isfinite(val):
-            x_istorija.append(np.array(X))
-            z_istorija.append(-val)  # Konvertuojame į maksimizavimą vizualizacijai
-        return val
-
-    # Vykdome optimizaciją priklausomai nuo metodo
-    if metodas.__name__ in ["gradientinis_nusileidimas", "greiciausias_nusileidimas"]:
-        # Metodams su gradientu
-        def apvalkalas_gradientui(X):
-            return gradientas(X)
-
-        result = metodas(apvalkalas_funkcijai, apvalkalas_gradientui, x0)
-    else:
-        # Metodams be gradiento (simpleksas)
-        result = metodas(apvalkalas_funkcijai, x0)
-
-    # Konvertuojame sąrašus į masyvus
-    x_istorija = np.vstack(x_istorija)
-    z_istorija = np.array(z_istorija)
-
-    # 3D trajektorijos braižymas (tik jei ax3d yra nurodytas)
-    if ax3d is not None:
-        ax3d.plot(x_istorija[:, 0], x_istorija[:, 1], z_istorija,
-                color=spalva, marker=zymeklis, markersize=5,
-                linewidth=2, alpha=0.7, label=metodo_pavadinimas)
-
-        # Pažymime pradinį tašką 3D
-        ax3d.scatter(x_istorija[0, 0], x_istorija[0, 1], z_istorija[0],
-                color=spalva, s=100, marker='o', edgecolor='black')
-
-        # Pažymime galutinį tašką 3D
-        ax3d.scatter(x_istorija[-1, 0], x_istorija[-1, 1], z_istorija[-1],
-                color=spalva, s=100, marker='X', edgecolor='black')
-
-    # 2D trajektorijos braižymas
-    ax2d.plot(x_istorija[:, 0], x_istorija[:, 1],
-            color=spalva, marker=zymeklis, markersize=5,
-            linewidth=2, alpha=0.7, label=metodo_pavadinimas)
-
-    # Pažymime pradinį ir galutinį taškus 2D
-    ax2d.scatter(x_istorija[0, 0], x_istorija[0, 1],
-                color=spalva, s=100, marker='o', edgecolor='black')
-    ax2d.scatter(x_istorija[-1, 0], x_istorija[-1, 1],
-                color=spalva, s=100, marker='X', edgecolor='black')
-
-    return result
-
-# ================= Optimizacijos metodai =================
-def gradientinis_nusileidimas(f, grad, x0, eps=1e-6, max_iter=1000):
-    """Gradientinio nusileidimo metodas su adaptyviu žingsniu ir perkrautimis"""
-    x = np.array(x0, dtype=float)
-    best_x, best_val = None, np.inf
-    f_evals, g_evals = 0, 0
-    restart_count = 0
-
-    for _ in range(3):  # 2 pakartotini startai
-        for it in range(max_iter):
-            # Dabartinis taškas
-            current_val = f(x)
-            f_evals += 1
-
-            # Geriausias sprendimas
-            if current_val < best_val:
-                best_val = current_val
-                best_x = x.copy()
-
-            g = grad(x)
-            g_evals += 1
-            if np.any(np.isinf(g)):
-                break  # Pakartotinas startas
-
-            # Armijo taisyklė žingsnio ilgiui nustatyti
-            alpha = 1.0
-            for _ in range(10):
-                x_new = x - alpha * g
-                x_new = np.maximum(x_new, 0.001)
-                if ar_leistinas(*x_new):
-                    f_new = f(x_new)
-                    f_evals += 1
-                    if f_new < current_val - 0.3 * alpha * np.linalg.norm(g) ** 2:
-                        break
-                alpha *= 0.5
-
-            x_new = x - alpha * g
-            x_new = np.maximum(x_new, 0.001)
-
-            # Stabdymo sąlyga
-            if np.linalg.norm(x_new - x) < eps:
-                x = x_new
-                break
-
-            x = x_new
-
-        # Jeigu turime gerą sprendinį
-        if best_x is not None and ar_leistinas(*best_x):
-            return best_x, best_val, it + 1, f_evals, g_evals
-
-       # Better restart strategy
-        restart_count += 1
-        x = best_x if best_x is not None else np.array([0.3, 0.3])
-        x = x + 0.05 * (2 * np.random.rand(2) - 1)
-        x = np.maximum(x, 0.01)
-        z = 1 - x[0] - x[1]
-        if z <= 0:
-            x = np.array([0.33, 0.33]) + 0.02 * np.random.rand(2)
-
-    # Jei visi bandymai nepavyko
-    if best_x is None or not ar_leistinas(*best_x):
-        best_x = np.array([0.408, 0.408])  # Artimas optimaliam
-        best_val = f(best_x)
-        f_evals += 1
-
-    return best_x, best_val, it + 1, f_evals, g_evals
-
-
-def greiciausias_nusileidimas(f, grad, x0, tol=1e-6, max_iter=1000):
-    """Greičiausio nusileidimo metodas su tiesiniu paieškos algoritmu"""
-    x = np.array(x0, dtype=float)
-    f_evals, g_evals = 0, 0
-
-    # Pradinis koregavimas užtikrinti leistinumą
-    x = np.maximum(x, 0.001)
-    if not ar_leistinas(*x):
-        x = np.array([0.3, 0.3])  # Numatytasis leistinas pradinis taškas
-
-    for it in range(max_iter):
-        # Gradiento skaičiavimas
-        g = grad(x)
-        g_evals += 1
-
-        # Konvergavimo tikrinimas
-        if np.any(np.isinf(g)) or np.linalg.norm(g) < tol:
+        norm = numpy.linalg.norm([xy[0] - xy_laikinas[0], xy[1] - xy_laikinas[1]])
+        if norm < e:
             break
 
-        # Nusileidimo kryptis
-        d = -g
+        xy = xy_laikinas
 
-        # Atgalinio žingsniavimo tiesinio paieškos algoritmas su Armijo sąlyga
-        alpha = 1.0
-        for _ in range(20):  # Maks. tiesinio paieškos iteracijos
-            x_new = x + alpha * d
-            x_new = np.maximum(x_new, 0.001)
+    return xy, iteracijos, path  # Grąžina galutinį tašką, iteracijų skaičių ir kelią
 
-            if not ar_leistinas(*x_new):
-                alpha *= 0.5
-                continue
+# Linijinės paieškos funkcija
+def line_search(funkcija, xy, grad, bounds=(0, 4)):
+    golden = (5**0.5 - 1) / 2
+    a, b = bounds
+    c = b - golden * (b - a)
+    d = a + golden * (b - a)
 
-            f_new = f(x_new)
-            f_evals += 1
+    tol = 1e-5
+    best_gamma = 1.0
+    best_value = float('inf')
 
-            # Armijo sąlyga
-            if f_new < f(x) + 1e-4 * alpha * np.dot(g, d):
-                x = x_new
-                break
+    while abs(b - a) > tol:
+        fc = funkcija.kviesti((xy[0] + c * grad[0], xy[1] + c * grad[1]))
+        fd = funkcija.kviesti((xy[0] + d * grad[0], xy[1] + d * grad[1]))
 
-            alpha *= 0.5
+        # Sekti geriausią rastą reikšmę
+        if fc < best_value:
+            best_value = fc
+            best_gamma = c
+        if fd < best_value:
+            best_value = fd
+            best_gamma = d
+
+        if fc < fd:
+            b = d
+            d = c
+            c = b - golden * (b - a)
         else:
-            break  # Tiesinė paieška nepavyko
+            a = c
+            c = d
+            d = a + golden * (b - a)
 
-    return x, f(x), it + 1, f_evals, g_evals
+    return best_gamma  # Grąžina geriausią rastą žingsnio dydį
 
-def deformuojamas_simpleksas(f, x0, tol=1e-8, max_iter=1000):
-    """Nelder-Mead deformuojamo simplekso metodas"""
-    n = len(x0)
-    f_evals = 0
+# Greičiausio nusileidimo algoritmas
+def GrcNusileid(funkcija, funkcijos_gradientas, x0y0):
+    e = 1e-3
+    iteracijos = 0
+    # xy - dabartinė taško pozicija
+    xy = x0y0
+    max_iter = 50
+    path = [xy] # path - saugo visą taškų kelią
+    min_grad = 1e-6
 
-    # Saugus simplekso inicijavimas - užtikrinant, kad taškai bus leistinoje srityje
-    def inicijuoti_simpleksa(x0):
-        # Jei pradinis taškas yra [0,0] arba netoli jo, sukuriame geresnį pradinį simpleksą
-        if np.linalg.norm(x0) < 0.1:
-            # Sukuriame simpleksą aplink žinomą gerą tašką
-            simplex = [np.array([0.33, 0.33]), np.array([0.38, 0.33]), np.array([0.33, 0.38])]
-        else:
-            simplex = [np.array(x0, dtype=float)]
-            for i in range(n):
-                perturbation = np.zeros(n)
-                perturbation[i] = 0.1 if x0[i] < 0.9 else -0.1  # Didesni trikdžiai
-                new_point = np.maximum(x0 + perturbation, 0.05)  # Vengiame nulinių reikšmių
-                if not ar_leistinas(*new_point):
-                    # Jei naujas taškas neleistinas, bandome kitą
-                    new_point = np.array([0.3, 0.3]) + 0.1 * np.random.rand(n)
-                simplex.append(new_point)
-        return simplex
+    while iteracijos < max_iter:
+        iteracijos += 1
+        grad = funkcijos_gradientas.kviesti(xy)
 
-    simplex = inicijuoti_simpleksa(x0)
-
-    # Įsitikiname, kad pradinis taškas leistinas
-    x_start = simplex[0].copy()
-    if not ar_leistinas(*x_start):
-        x_start = np.array([0.33, 0.33])  # Artimas optimaliam sprendiniui
-
-    best_x, best_val = x_start, f(x_start)
-    f_evals += 1
-
-    for it in range(max_iter):
-        # Įvertinimas ir rūšiavimas
-        values = []
-        for x in simplex:
-            val = f(x) if ar_leistinas(*x) else np.inf
-            values.append(val)
-            f_evals += 1
-
-        order = np.argsort(values)
-        simplex = [simplex[i] for i in order]
-        values = [values[i] for i in order]
-
-        # Atnaujinti geriausią rastą tašką
-        if values[0] < best_val:
-            best_val = values[0]
-            best_x = simplex[0].copy()
-
-        # Konvergencijos tikrinimas
-        if np.std(values[:n]) < tol:
+        grad_magnitude = numpy.linalg.norm([grad[0], grad[1]])
+        if grad_magnitude < min_grad:
             break
 
-        # Centroidas (be blogiausio taško)
-        centroid = np.mean(simplex[:-1], axis=0)
+        if grad_magnitude > 1:
+            grad = (grad[0]/grad_magnitude, grad[1]/grad_magnitude)
 
-        # Atspindys
-        xr = centroid + (centroid - simplex[-1])
-        xr = np.maximum(xr, 0.05)  # Užtikriname teigiamumą
-        fr = f(xr) if ar_leistinas(*xr) else np.inf
-        f_evals += 1
+        gamma = line_search(funkcija, xy, grad)
+        xy_laikinas = (xy[0] + gamma * grad[0], xy[1] + gamma * grad[1])
+        path.append(xy_laikinas)
 
-        if values[0] <= fr < values[-2]:
-            simplex[-1] = xr
-            continue
+        if numpy.linalg.norm((xy[0] - xy_laikinas[0], xy[1] - xy_laikinas[1])) < e:
+            break
 
-        # Išplėtimas
-        if fr < values[0]:
-            xe = centroid + 2.0 * (xr - centroid)
-            xe = np.maximum(xe, 0.05)
-            fe = f(xe) if ar_leistinas(*xe) else np.inf
-            f_evals += 1
+        xy = xy_laikinas
 
-            simplex[-1] = xe if fe < fr else xr
-            continue
+    return xy, iteracijos, path
 
-        # Suspaudimas
-        xc = centroid + 0.5 * (simplex[-1] - centroid if fr >= values[-1] else xr - centroid)
-        xc = np.maximum(xc, 0.05)
-        fc = f(xc) if ar_leistinas(*xc) else np.inf
-        f_evals += 1
+# Deformuojamo simplekso algoritmas
+def DefSimplex(funkcija, x0y0, a):
+    e = 1e-3
+    iteracijos = 0
+    max_iter = 80
+    n = len(x0y0)
 
-        if fc < values[-1]:
-            simplex[-1] = xc
-            continue
+    simplexas = numpy.zeros((n + 1, n))
+    simplexas[0] = numpy.array([ x0y0[0], x0y0[1] ])
 
-        # Sumažinimas - traukiame visus taškus link geriausio
-        for i in range(1, len(simplex)):
-            simplex[i] = simplex[0] + 0.5 * (simplex[i] - simplex[0])
-            simplex[i] = np.maximum(simplex[i], 0.05)
+    d1 = (numpy.sqrt(n + 1) + n - 1) / (n * numpy.sqrt(2)) * a
+    d2 = (numpy.sqrt(n + 1) - 1) / (n * numpy.sqrt(2)) * a
 
-    # Įsitikiname, kad grąžiname leistinoje srityje esantį sprendinį
-    if not ar_leistinas(*best_x):
-        best_x = np.array([0.408, 0.408])  # Teorinis optimalus
-        best_val = f(best_x)
-        f_evals += 1
+    for i in range(1, n + 1):
+        for j in range(n):
+            if i == j + 1:
+                simplexas[i][j] = simplexas[0][j] + d2
+            else:
+                simplexas[i][j] = simplexas[0][j] + d1
 
-    return best_x, best_val, it + 1, f_evals, 0
+    while iteracijos < max_iter:
+        iteracijos += 1
+        blogiausia = 0
+        geresne = 0
 
-# ================= Testavimas =================
-def apskaiciuoti_z(x, y):
-    """Apskaičiuoja z pagal x ir y reikšmes"""
-    return (1 - x - y) if ar_leistinas(x, y) else np.nan
+        for i in range(1, n + 1):
+            if funkcija.kviesti((simplexas[i][0], simplexas[i][1])) > funkcija.kviesti((simplexas[blogiausia][0], simplexas[blogiausia][1])):
+                blogiausia = i
 
-# Teorinis geriausias sprendimas
-optimal = 1/3  # 0.33333...
-print(f"Teorinis optimalus sprendinys: x=y=z={optimal:.6f}, Tūris={(optimal ** 3) ** 2:.6f}\n")
+            if funkcija.kviesti((simplexas[i][0], simplexas[i][1])) < funkcija.kviesti((simplexas[geresne][0], simplexas[geresne][1])):
+                geresne = i
 
-# Studento knygelės numeris 2314009
-studento_numeris = "2314009"
-a = 0  # "a" skaitmuo iš studentų knygelės
-b = 9  # "b" skaitmuo iš studentų knygelės
+        xc = numpy.zeros(n)
 
-# Pradiniai taškai
-X0 = np.array([0.0, 0.0])
-X1 = np.array([1.0, 1.0])
-X2 = np.array([a/10.0, b/10.0])  # X2 pagal studento numerį
+        for i in range(n + 1):
+            if i != blogiausia:
+                xc += simplexas[i]
 
-# Talpinsime rezultatus
-visos_rezultatu_lenteles = []
+        xc /= n
+        xr = -simplexas[blogiausia] + 2 * xc
 
-for i, x0 in enumerate([X0, X1, X2]):
-    print(f"\n=== Pradedame optimizuoti nuo taško X{i}: {x0} ===")
+        if funkcija.kviesti((xr[0], xr[1])) < funkcija.kviesti((simplexas[blogiausia][0], simplexas[blogiausia][1])):
+            simplexas[blogiausia] = xr
+        else:
+            xc = (simplexas[blogiausia] + xc) / 2
 
-    tikslo_funkcija([0, 0], [0])  # Nustatome funkcijos iškvietimų skaitiklį
+            for i in range(n + 1):
+                if i != blogiausia:
+                    simplexas[i] = (simplexas[i] + simplexas[blogiausia]) / 2
 
-    sol_gd, val_gd, it_gd, f_gd, g_gd = gradientinis_nusileidimas(tikslo_funkcija, gradientas, x0)
-    sol_sd, val_sd, it_sd, f_sd, g_sd = greiciausias_nusileidimas(tikslo_funkcija, gradientas, x0)
-    sol_nm, val_nm, it_nm, f_nm, _ = deformuojamas_simpleksas(tikslo_funkcija, x0)
+                if funkcija.kviesti((simplexas[i][0], simplexas[i][1])) < funkcija.kviesti((simplexas[geresne][0], simplexas[geresne][1])):
+                    geresne = i
 
-    # Sukaupkime rezultatus į DataFrames
-    rezultatu_lentele = pd.DataFrame({
-        "Metodas": ["Gradientinis nusileidimas", "Greičiausias nusileidimas", "Deformuojamas simpleksas"],
-        "x": [sol_gd[0], sol_sd[0], sol_nm[0]],
-        "y": [sol_gd[1], sol_sd[1], sol_nm[1]],
-        "z": [apskaiciuoti_z(*sol_gd), apskaiciuoti_z(*sol_sd), apskaiciuoti_z(*sol_nm)],
-        "Tūris": [-val_gd, -val_sd, -val_nm],
-        "Iteracijos": [it_gd, it_sd, it_nm],
-        "Funkcijos kvietimai": [f_gd, f_sd, f_nm],
-        "Gradiento kvietimai": [g_gd, g_sd, 0]
+            if funkcija.kviesti((xr[0], xr[1])) < funkcija.kviesti((simplexas[geresne][0], simplexas[geresne][1])):
+                simplexas[blogiausia] = xr
+            else:
+                for i in range(n + 1):
+                    if i != geresne:
+                        simplexas[i] = (simplexas[i] + simplexas[geresne]) / 2
+
+                    if funkcija.kviesti((simplexas[i][0], simplexas[i][1])) < funkcija.kviesti((simplexas[geresne][0], simplexas[geresne][1])):
+                        geresne = i
+
+        if numpy.linalg.norm(simplexas[blogiausia] - simplexas[geresne]) < e:
+            break
+
+    return (simplexas[geresne][0], simplexas[geresne][1]), iteracijos
+
+# Pradiniai duomenys
+A = 4
+B = 5
+duomenys = [(0, 0), (1, 1), (A / 10, B / 10)]
+# Tikslinė funkcija
+def TFunc(x, y):
+    return -1*((1-x-y)*x*y)/8
+
+# Klasė, skirta talpyklai ir funkcijos kvietimų skaičiavimui
+class FloatFunWrapper:
+    def __init__(self, tikslofunkcija):
+        self.__funkcija = tikslofunkcija
+        self.__talpykla = {}
+        self.__kvietimai = 0
+
+    def gauti_talpykla(self):
+        return self.__talpykla
+
+    def nustatyti_talpykla(self, talpykla):
+        self.__talpykla = talpykla
+
+    def kviesti(self, xy, talpykla = True):
+        if not talpykla:
+            return self.__funkcija(xy[0], xy[1])
+
+        if xy in self.__talpykla:
+            return self.__talpykla[xy]
+
+        self.__talpykla[xy] = self.__funkcija(xy[0], xy[1])
+        self.__kvietimai += 1
+        return self.__talpykla[xy]
+
+    def kvietimai(self):
+        return self.__kvietimai
+
+class TupleFunWrapper:
+    def __init__(self, tikslofunkcija):
+        self.__funkcija = tikslofunkcija
+        self.__talpykla = {}
+        self.__kvietimai = 0
+
+    def gauti_talpykla(self):
+        return self.__talpykla
+
+    def nustatyti_talpykla(self, talpykla):
+        self.__talpykla = talpykla
+
+    def kviesti(self, xy, talpykla = True):
+        if not talpykla:
+            return self.__funkcija(xy[0], xy[1])
+
+        if xy in self.__talpykla:
+            return self.__talpykla[xy]
+
+        self.__talpykla[xy] = self.__funkcija(xy[0], xy[1])
+        self.__kvietimai += 1
+        return self.__talpykla[xy]
+
+    def kvietimai(self):
+        return self.__kvietimai
+
+# 3D grafiko braižymo funkcija
+def plot3d(funkcija):
+    x_reiksmes = (-1, 1)
+    y_reiksmes = (-1, 1)
+    xs = numpy.linspace(x_reiksmes[0], x_reiksmes[1], 100)
+    ys = numpy.linspace(y_reiksmes[0], y_reiksmes[1], 100)
+    xs, ys = numpy.meshgrid(xs, ys)
+    zs = numpy.array([funkcija.kviesti((x, y), False) for x, y in zip(xs, ys) ])
+    fig = plt.figure()
+    ax = fig.add_subplot(111,projection='3d')
+
+    def prideti_taska(ax, x, y, z, color='red', marker='o', size=20, zorder=1):
+        ax.scatter(x, y, z, color=color, marker=marker, s=size, zorder=zorder)
+
+    for key in funkcija.gauti_talpykla().keys():
+        prideti_taska(ax, key[0], key[1], funkcija.gauti_talpykla()[key])
+
+    ax.plot_surface(xs, ys, zs, color='yellow')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.show(block=True)
+
+# Algoritmų objektai ir vykdymas
+GradientoNusileidimas = FloatFunWrapper(TFunc)
+GradGradientoNusileidimas = TupleFunWrapper(gradientas)
+
+GreiciausiasNusileidimas = FloatFunWrapper(TFunc)
+GradGreicNusileidimas = TupleFunWrapper(gradientas)
+
+Simplexas = FloatFunWrapper(TFunc)
+GradSimplexas = TupleFunWrapper(gradientas)
+
+# Add this code after defining your algorithm objects but before the table generation code
+
+results = []
+
+# Run algorithms with each starting point
+for xy in duomenys:
+    # Reset function calls counters
+    GradientoNusileidimas = FloatFunWrapper(TFunc)
+    GradGradientoNusileidimas = TupleFunWrapper(gradientas)
+
+    # Gradientinio nusileidimo algoritmas
+    answer, iterations, path = GradNusileidimas(GradGradientoNusileidimas, xy, 0.3)
+    f_value = TFunc(answer[0], answer[1])
+
+    results.append({
+        'algorithm': 'Gradientinis nusileidimas',
+        'answer': answer,
+        'f_value': f_value,
+        'iterations': iterations,
+        'grad_calls': GradGradientoNusileidimas.kvietimai(),
+        'path': path,
+        'plot_func': GradientoNusileidimas
     })
 
-    print("\nOptimizacijos rezultatai:")
-    print("------------------------")
-    print(rezultatu_lentele.to_string(index=False, formatters={'Tūris': '{:.6f}'.format,
-                                                         'x': '{:.6f}'.format,
-                                                         'y': '{:.6f}'.format,
-                                                         'z': '{:.6f}'.format}))
+    # Reset function calls counters
+    GreiciausiasNusileidimas = FloatFunWrapper(TFunc)
+    GradGreicNusileidimas = TupleFunWrapper(gradientas)
 
-    visos_rezultatu_lenteles.append(rezultatu_lentele)
+    # Greičiausio nusileidimo algoritmas
+    answer, iterations, path = GrcNusileid(GreiciausiasNusileidimas, GradGreicNusileidimas, xy)
+    f_value = TFunc(answer[0], answer[1])
 
-# Visų pradinių taškų suvestinė
-print("\n==== BENDRA REZULTATŲ SUVESTINĖ ====")
-suvestine = pd.concat(visos_rezultatu_lenteles)
-suvestine['Pradinis taškas'] = ["X0=(0,0)"] * 3 + ["X1=(1,1)"] * 3 + [f"X2=({a/10},{b/10})"] * 3
+    results.append({
+        'algorithm': 'Greičiausias nusileidimas',
+        'answer': answer,
+        'f_value': f_value,
+        'iterations': iterations,
+        'func_calls': GreiciausiasNusileidimas.kvietimai(),
+        'grad_calls': GradGreicNusileidimas.kvietimai(),
+        'path': path,
+        'plot_func': GreiciausiasNusileidimas
+    })
 
-# Išrikiuojame pagal pradinį tašką ir metodą
-suvestine = suvestine[['Pradinis taškas', 'Metodas', 'x', 'y', 'z', 'Tūris', 'Iteracijos',
-                        'Funkcijos kvietimai', 'Gradiento kvietimai']]
-print(suvestine.to_string(index=False, formatters={'Tūris': '{:.6f}'.format,
-                                                  'x': '{:.6f}'.format,
-                                                  'y': '{:.6f}'.format,
-                                                  'z': '{:.6f}'.format}))
+    # Reset function calls counters
+    Simplexas = FloatFunWrapper(TFunc)
 
-# ================= Vizualizacija =================
-plt.close('all')
-plt.rcParams['font.family'] = 'DejaVu Sans'
+    # Deformuojamo simplekso algoritmas - need to store path for this algorithm
+    answer, iterations = DefSimplex(Simplexas, xy, 0.5)
+    f_value = TFunc(answer[0], answer[1])
 
-# Duomenų paruošimas
-x = np.linspace(0.01, 0.8, 100)
-y = np.linspace(0.01, 0.8, 100)
-X, Y = np.meshgrid(x, y)
-Z = np.zeros_like(X)
+    # For Simplex, we need a placeholder path since DefSimplex doesn't return one
+    # You might want to modify DefSimplex to track path if needed
+    results.append({
+        'algorithm': 'Deformuojamas simpleksas',
+        'answer': answer,
+        'f_value': f_value,
+        'iterations': iterations,
+        'func_calls': Simplexas.kvietimai(),
+        'path': [xy, answer],  # Simplified path for visualization
+        'plot_func': Simplexas
+    })
 
-for i in range(X.shape[0]):
-    for j in range(X.shape[1]):
-        Z[i, j] = -(X[i,j] * Y[i,j] * (1 - X[i,j] - Y[i,j])) if ar_leistinas(X[i,j], Y[i,j]) else np.nan
+# Now the table code should work because results has items
+# Create a single neat table
+table_data = []
+headers = ["Algorithm", "Initial Point", "Result Point", "Function Value",
+           "Iterations", "Function Calls", "Gradient Calls"]
 
-# 1. 3D PAVIRŠIAUS GRAFIKAS
-fig3d = plt.figure(figsize=(10, 8))
-ax3d = fig3d.add_subplot(111, projection='3d')
-surf = ax3d.plot_surface(X, Y, Z, cmap='viridis', alpha=0.7, edgecolor='none')
-ax3d.set_xlabel('x (priekinės/galinės sienos)', fontsize=12)
-ax3d.set_ylabel('y (šoninės sienos)', fontsize=12)
-ax3d.set_zlabel('Tūris', fontsize=12)
-ax3d.set_title('3D paviršius ir optimizacijos keliai', fontsize=14)
-ax3d.view_init(elev=35, azim=125)
+# Group results by initial point
+for i, initial_point in enumerate(duomenys):
+    # Get all results for this initial point
+    point_results = [r for r in results if r['path'][0] == initial_point]
 
-# 2. 2D KONTŪRAS
-fig2d = plt.figure(figsize=(10, 8))
-ax2d = fig2d.add_subplot(111)
-contour = ax2d.contourf(X, Y, Z, levels=15, cmap='viridis', alpha=0.7)
-contour_lines = ax2d.contour(X, Y, Z, levels=8, colors='white', alpha=0.5, linewidths=1)
-ax2d.clabel(contour_lines, inline=True, fontsize=9, fmt='%.4f')
-cbar = plt.colorbar(contour, ax=ax2d)
-cbar.set_label('Tūris', fontsize=12, rotation=270, labelpad=20)
+    for result in point_results:
+        algorithm = result['algorithm']
+        answer = f"({result['answer'][0]:.6f}, {result['answer'][1]:.6f})"
+        f_value = f"{result['f_value']:.8f}"
+        iterations = result['iterations']
+        func_calls = result.get('func_calls', '-')
+        grad_calls = result.get('grad_calls', '-')
 
-# Optimalus taškas abiejuose grafikuose
-optimal_z = -tikslo_funkcija([optimal, optimal])
-ax3d.scatter([optimal], [optimal], [optimal_z], c='red', marker='*', s=200,
-             edgecolor='yellow', linewidth=2, label='Optimalus taškas')
-ax2d.scatter(optimal, optimal, c='red', marker='*', s=300,
-             edgecolor='yellow', linewidth=2, zorder=10, label='Optimalus taškas')
+        table_data.append([
+            algorithm,
+            f"({initial_point[0]}, {initial_point[1]})",
+            answer,
+            f_value,
+            iterations,
+            func_calls,
+            grad_calls
+        ])
 
-# Algoritmai ir stiliai
-metodai = [gradientinis_nusileidimas, greiciausias_nusileidimas, deformuojamas_simpleksas]
-metodu_pavadinimai = ['Gradientinis nusileidimas', 'Greičiausias nusileidimas', 'Deformuojamas simpleksas']
-spalvos = ['crimson', 'limegreen', 'royalblue']
-zymekliai = ['o', '^', 's']
+# Print the table
+print("\nOptimization Results:")
+print(tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=".8f"))
 
-# Pasirenkame vieną pradinį tašką (geresniam aiškumui)
-pradinis_taskas = X0  # Galima pakeisti į X1 arba X2
+# Rezultatų grupavimas pagal algoritmą
+grouped_results = {}
+for result in results:
+    if result['algorithm'] not in grouped_results:
+        grouped_results[result['algorithm']] = []
+    grouped_results[result['algorithm']].append(result)
 
-# Vykdome ir vaizduojame optimizaciją
-for i, (metodas, pavadinimas, spalva, zymeklis) in enumerate(
-    zip(metodai, metodu_pavadinimai, spalvos, zymekliai)):
-    rezultatas = sekti_optimizacija(tikslo_funkcija, metodas, pradinis_taskas,
-                                   pavadinimas, spalva, zymeklis, ax3d, ax2d)
+# Kiekvieno algoritmo rezultatų braižymas
+for algorithm, alg_results in grouped_results.items():
+    fig = plt.figure(figsize=(15, 5))
+    fig.suptitle(algorithm, fontsize=16, y=1.05)
 
-# Užbaigiame grafikus
-ax2d.set_xlabel('x (priekinės/galinės sienos)', fontsize=12)
-ax2d.set_ylabel('y (šoninės sienos)', fontsize=12)
-ax2d.set_title('Optimizacijos metodų trajektorijos', fontsize=16)
-ax2d.set_xlim(0.0, 0.7)
-ax2d.set_ylim(0.0, 0.7)
-ax2d.grid(True, alpha=0.3)
-ax2d.legend(loc='upper right', fontsize=10)
+    for idx, result in enumerate(alg_results):
+        ax = fig.add_subplot(1, 3, idx + 1, projection='3d')
+        x_reiksmes = (-1, 1)
+        y_reiksmes = (-1, 1)
+        xs = numpy.linspace(x_reiksmes[0], x_reiksmes[1], 100)
+        ys = numpy.linspace(y_reiksmes[0], y_reiksmes[1], 100)
+        xs, ys = numpy.meshgrid(xs, ys)
+        zs = numpy.array([result['plot_func'].kviesti((x, y), False) for x, y in zip(xs, ys) ])
 
-# Išsaugome ir rodome grafikus
-plt.tight_layout()
-fig3d.savefig('optimizacijos_pavirsius.png', dpi=300)
-fig2d.savefig('optimizacijos_trajektorijos.png', dpi=300)
-plt.show()
+        ax.plot_surface(xs, ys, zs, color='yellow', alpha=0.8)
+
+        path = result['path']
+        path_x = [p[0] for p in path]
+        path_y = [p[1] for p in path]
+        path_z = [TFunc(x, y) for x, y in path]
+
+        ax.scatter(path_x, path_y, path_z, color='red', marker='o', s=20, zorder=2)
+
+        ax.plot(path_x, path_y, path_z, color='blue', linewidth=1, zorder=1)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(f"Pradinis taškas: ({duomenys[idx][0]}, {duomenys[idx][1]})")
+
+    plt.tight_layout()
+    plt.show(block=False)
+
+plt.show(block=True)  # Palikti visus langus atidarytus
