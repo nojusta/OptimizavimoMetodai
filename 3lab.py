@@ -2,41 +2,40 @@ import numpy as np
 from prettytable import PrettyTable
 
 def tikslo_funkcija(x):
-    return -x[0] * x[1] * x[2]
+    return -x[0] * x[1] * x[2] # staciakampio gretasienio turis: V = x * y * z
 
-def gi(x):
-    return 2 * (x[0]*x[1] + x[1]*x[2] + x[0]*x[2]) - 1
+def gi(x): # netiesinio apribojimo funkcija, gi(x) = 0
+    # pavirsiaus plotas: S = 2 * (xy + xz + yz)
+    return 2 * (x[0]*x[1] + x[1]*x[2] + x[0]*x[2]) - 1 #  
 
-def hi(x):
+def hi(x): # nelygybinis apribojimas, hi(x) <= 0 (matmenys neneigiami)
     return [-x[0], -x[1], -x[2]]
 
 def baudos_funkcija(x, r):
     g = gi(x)
     h = hi(x)
-    bauda = g**2 + sum((max(0, h_i))**2 for h_i in h)
-    return tikslo_funkcija(x) + 1.0/r * bauda
+    bauda = g**2 + sum((max(0, h_i))**2 for h_i in h) # kvadratines baudos
+    return tikslo_funkcija(x) + 1.0/r * bauda # kuo mazesnis r, tuo didesne bauda
 
+# parodo krypti, kuria mazeja baudos funkcija. (kryptis bus naudojama greiciausiame nusileidime)
 def baudos_funkcijos_gradientas(x, r):
     grad_f = np.array([
         -x[1]*x[2],
         -x[0]*x[2],
         -x[0]*x[1]
-    ])
+    ]) # tikslines funkcijos gradientas (i kuria puse ji mazeja).
     g = gi(x)
     grad_g = np.array([
         4 * g * (x[1] + x[2]),
         4 * g * (x[0] + x[2]),
         4 * g * (x[0] + x[1])
-    ])
+    ]) # gradiento dalis nuo g^2
     h = hi(x)
     grad_h = np.zeros(3)
     for i in range(3):
         if h[i] > 0:
-            grad_h[i] = -2 * h[i]
+            grad_h[i] = -2 * h[i] # funkcijos pokytis, stumia atgal i leistina riba
     return grad_f + (1.0 / r) * (grad_g + grad_h)
-
-def tenkina_apribojimus(x):
-    return gi(x) <= 0 and all(xi >= 0 for xi in x)
 
 def auksinio_pjuvio_paieska(f, x, grad, r, a=0, b=10, tol=1e-9):
     phi = (np.sqrt(5) - 1) / 2
@@ -66,20 +65,22 @@ def greiciausias_nusileidimas(x0, r, tol=1e-6, max_iter=1000):
     total_func_evals = 0
     iter_count = 0
 
-    grad = baudos_funkcijos_gradientas(x, r)
+    grad = baudos_funkcijos_gradientas(x, r) 
     total_func_evals += 1
 
     for _ in range(max_iter):
+        # tikrinam ar naujas x mazina
         gamma, evals = auksinio_pjuvio_paieska(baudos_funkcija, x, grad, r)
         total_func_evals += evals
 
-        x_new = x - gamma * grad
+        x_new = x - gamma * grad # naujas taskas, kuri gauname pazenge zingsniu gamma pries gradienta
         total_func_evals += 2
         old_penalty = baudos_funkcija(x, r)
         new_penalty = baudos_funkcija(x_new, r)
 
+        # tikrinam ar zingsnis gamma buvo per didelis
         while new_penalty > old_penalty and gamma > tol:
-            gamma *= 0.9
+            gamma *= 0.9 # mazinam zingsni
             x_new = x - gamma * grad
             new_penalty = baudos_funkcija(x_new, r)
             total_func_evals += 1
@@ -107,11 +108,11 @@ def issami_baudos_metodo_seka(x0, r_seka, c=1e-3):
         x, iters, func_evals = greiciausias_nusileidimas(x, r, tol=tol_r, max_iter=1000)
         total_iters += iters
         total_func_evals += func_evals
-        fval = tikslo_funkcija(x)
+        fval = -tikslo_funkcija(x)
         gval = gi(x)
         hval = hi(x)
         penalty = baudos_funkcija(x, r)
-        print(f"r={r:.5f} | x=({x[0]:.6f}, {x[1]:.6f}, {x[2]:.6f}) | f(x)={-fval:.6f} | g(x)={gval:.6f} | h(x)={[round(h,6) for h in hval]} | Penalty={penalty:.6f} | Iter={iters} | FuncEval={func_evals}")
+        print(f"r={r:.5f} | x=({x[0]:.6f}, {x[1]:.6f}, {x[2]:.6f}) | f(x)={fval:.6f} | g(x)={gval:.6f} | h(x)={[round(h,6) for h in hval]} | Penalty={penalty:.6f} | Iter={iters} | FuncEval={func_evals}")
     return x, total_iters, total_func_evals
 
 def main():
@@ -130,13 +131,13 @@ def main():
     print("\n"+"="*80)
     lentele = PrettyTable()
     lentele.field_names = [
-        "Pradinis taskas", "Galutinis taskas (gauti sprendiniai)", "Tikslo f.", "g(x)", "h(x)", "Iteracijos", "Funkc. kvietimai"
+        "Pradinis taskas", "Galutinis taskas (gauti spr.)", "Tikslo f.", "g(x)", "h(x)", "Iteracijos", "Funkc. kvietimai"
     ]
     for prad, galut, fval, gval, hval, iter_suma, func_eval_suma in rezultatai:
         lentele.add_row([
             f"[{prad[0]:.2f}, {prad[1]:.2f}, {prad[2]:.2f}]",
             f"[{galut[0]:.6f}, {galut[1]:.6f}, {galut[2]:.6f}]",
-            f"{-fval:.6f}",
+            f"{fval:.6f}",
             f"{gval:.6f}",
             f"[{hval[0]:.6f}, {hval[1]:.6f}, {hval[2]:.6f}]",
             iter_suma,
