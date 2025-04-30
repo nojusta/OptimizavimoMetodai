@@ -29,17 +29,16 @@ def baudos_funkcijos_gradientas(x, r):
         4 * g * (x[0] + x[1])
     ])
     h = hi(x)
-    grad_h = np.array([
-        -2*h[0] if h[0] > 0 else 0,
-        -2*h[1] if h[1] > 0 else 0,
-        -2*h[2] if h[2] > 0 else 0
-    ])
-    return grad_f + 1.0/r * (grad_g + grad_h)
+    grad_h = np.zeros(3)
+    for i in range(3):
+        if h[i] > 0:
+            grad_h[i] = -2 * h[i]
+    return grad_f + (1.0 / r) * (grad_g + grad_h)
 
 def tenkina_apribojimus(x):
     return gi(x) <= 0 and all(xi >= 0 for xi in x)
 
-def auksinio_pjuvio_paieska(f, x, grad, r, a=0, b=10, tol=1e-6):
+def auksinio_pjuvio_paieska(f, x, grad, r, a=0, b=10, tol=1e-9):
     phi = (np.sqrt(5) - 1) / 2
     x1 = b - phi * (b - a)
     x2 = a + phi * (b - a)
@@ -62,49 +61,50 @@ def auksinio_pjuvio_paieska(f, x, grad, r, a=0, b=10, tol=1e-6):
         evals += 1
     return (a + b) / 2, evals
 
-def greiciausias_nusileidimas(x0, r, tol=1e-8, max_iter=5000):
+def greiciausias_nusileidimas(x0, r, tol=1e-6, max_iter=1000):
     x = np.array(x0, dtype=float)
     total_func_evals = 0
+    iter_count = 0
 
     grad = baudos_funkcijos_gradientas(x, r)
     total_func_evals += 1
-    if np.linalg.norm(grad) < tol:
-        return x, 0, total_func_evals  
 
-    for i in range(1, max_iter + 1):
+    for _ in range(max_iter):
         gamma, evals = auksinio_pjuvio_paieska(baudos_funkcija, x, grad, r)
         total_func_evals += evals
-        x_naujas = x - gamma * grad
-        sena_bauda = baudos_funkcija(x, r)
-        nauja_bauda = baudos_funkcija(x_naujas, r)
-        total_func_evals += 2
 
-        while (nauja_bauda > sena_bauda or not tenkina_apribojimus(x_naujas)) and gamma > tol:
+        x_new = x - gamma * grad
+        total_func_evals += 2
+        old_penalty = baudos_funkcija(x, r)
+        new_penalty = baudos_funkcija(x_new, r)
+
+        while new_penalty > old_penalty and gamma > tol:
             gamma *= 0.9
-            x_naujas = x - gamma * grad
-            nauja_bauda = baudos_funkcija(x_naujas, r)
+            x_new = x - gamma * grad
+            new_penalty = baudos_funkcija(x_new, r)
             total_func_evals += 1
 
-        if np.linalg.norm(x_naujas - x) < tol or gamma < tol:
-            x = x_naujas
-            return x, i, total_func_evals
+        iter_count += 1
 
-        x = x_naujas
+        if np.linalg.norm(grad) < tol or gamma < tol or np.linalg.norm(x_new - x) < tol:
+            x = x_new
+            break
+
+        x = x_new
         grad = baudos_funkcijos_gradientas(x, r)
         total_func_evals += 1
-        if np.linalg.norm(grad) < tol:
-            return x, i, total_func_evals
 
-    return x, max_iter, total_func_evals
+    return x, iter_count, total_func_evals
 
-def issami_baudos_metodo_seka(x0, r_seka, tol=1e-8):
+def issami_baudos_metodo_seka(x0, r_seka, c=1e-3):
     x = np.array(x0, dtype=float)
     total_iters = 0
     total_func_evals = 0
     print(f"\nPradinis taskas: {np.round(x, 6)}")
     for r in r_seka:
+        tol_r = c * r  # tol priklauso nuo r
         x_prev = x.copy()
-        x, iters, func_evals = greiciausias_nusileidimas(x, r, tol, max_iter=5000)
+        x, iters, func_evals = greiciausias_nusileidimas(x, r, tol=tol_r, max_iter=1000)
         total_iters += iters
         total_func_evals += func_evals
         fval = tikslo_funkcija(x)
@@ -123,14 +123,14 @@ def main():
     for pradinis in [x0, x1, xm]:
         print("\n"+"="*80)
         galutinis, iter_suma, func_eval_suma = issami_baudos_metodo_seka(pradinis, r_seka)
-        fval = tikslo_funkcija(galutinis)
+        fval = -tikslo_funkcija(galutinis)
         gval = gi(galutinis)
         hval = hi(galutinis)
         rezultatai.append((pradinis, galutinis, fval, gval, hval, iter_suma, func_eval_suma))
     print("\n"+"="*80)
     lentele = PrettyTable()
     lentele.field_names = [
-        "Pradinis taskas", "Galutinis taskas", "Tikslo f.", "g(x)", "h(x)", "Iteracijos", "Funkc. kvietimai"
+        "Pradinis taskas", "Galutinis taskas (gauti sprendiniai)", "Tikslo f.", "g(x)", "h(x)", "Iteracijos", "Funkc. kvietimai"
     ]
     for prad, galut, fval, gval, hval, iter_suma, func_eval_suma in rezultatai:
         lentele.add_row([
