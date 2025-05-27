@@ -11,44 +11,55 @@ def spausdinti_matrica(matrica, kintamieji, apribojimai):
         print(label + " ".join(f"{val:>{W}.2f}" for val in row))
 
 def simpleksas(C, a, b, kintamieji, apribojimai):
-    m = len(a)
-    n = len(C)
+    m = len(a)  # apribojimų skaičius (eilučių)
+    n = len(C)  # kintamųjų skaičius iskaitant ir s (stulpelių be tikslo funkcijos)
     matrica = [[0.0 for _ in range(n + 1)] for _ in range(m + 1)]
     matrica[0][0] = 0.0
+
+    # surašomi apribojimų dešinės pusės skaičiai
     for i in range(m):
         matrica[i + 1][0] = b[i]
+
+    # surašomi tikslo funkcijos koeficientai
     for j in range(n):
         matrica[0][j + 1] = C[j]
+
+    # Užpildomos likusios apribojimų koeficientų reikšmės
     for i in range(m):
         for j in range(n):
             matrica[i + 1][j + 1] = a[i][j]
 
     iteracija = 0
 
-    while any(matrica[0][j + 1] < -1e-9 for j in range(n)):
+    while any(matrica[0][j + 1] < -1e-9 for j in range(n)): # kol z eilutej yra >= 0 reiksmiu
         print(f"\nTarpinė matrica (iteracija {iteracija + 1}):")
-        spausdinti_matrica(matrica, kintamieji, apribojimai)
-        pivot_column = min((j + 1 for j in range(n)), key=lambda j: matrica[0][j], default=None)
+        spausdinti_matrica(matrica, kintamieji, apribojimai) # dabartine lentele, stebejimui
+        pivot_column = min((j + 1 for j in range(n)), key=lambda j: matrica[0][j], default=None) # z eilutej maziausia reiksme
         if pivot_column is None:
-            break
+            break # jei nerandam - stabdom
         koef = []
+
+        #  tikrinam visus apribojimus – su kuo galima išeit
         for i in range(m):
-            if matrica[i + 1][pivot_column] > 1e-12:
+            if matrica[i + 1][pivot_column] > 1e-12: # Jei koefas stulpelyje > 0, skaičiuojam b / koef (santykis) – tą mažesnį pasirenkam
                 koef.append(matrica[i + 1][0] / matrica[i + 1][pivot_column])
             else:
                 koef.append(float('inf'))
         if all(x == float('inf') for x in koef):
-            break
-        pivot_row = koef.index(min(koef)) + 1
-        pivot_value = matrica[pivot_row][pivot_column]
+            break # Jei visi santykiai buvo netinkami – nutraukiam (sprendinio nėra)
+        pivot_row = koef.index(min(koef)) + 1 # mažiausio santykio vieta → tai bus išeinantis kintamasis
+        pivot_value = matrica[pivot_row][pivot_column] # reiksme to elemento, naudojama normalizavimui
         for j in range(n + 1):
-            matrica[pivot_row][j] /= pivot_value
+            matrica[pivot_row][j] /= pivot_value # Padarom pivot reikšmę = 1
+
+        # Visose kitose eilutėse eliminuojam pivot stulpelį (padarom = 0)
         for i in range(m + 1):
             if i == pivot_row:
                 continue
             factor = matrica[i][pivot_column]
             for j in range(n + 1):
                 matrica[i][j] -= factor * matrica[pivot_row][j]
+
         for j in range(n):
             C[j] = matrica[0][j + 1]
         iteracija += 1
@@ -85,7 +96,7 @@ def spausdinti_sprendini(matrica, kintamieji, apribojimai, iteracijos):
     print(f"{iteracijos} iteracijos")
 
 def pagrindine():
-    a, b, c = 1, 4, 5
+    a, b, c = 1, 4, 5 # pradines uzduoties parametrai - 8, 10, 3
     C = [2, -3, 0, -5, 0, 0, 0]
     a_mat = [
         [-1, 1, -1, -1, 1, 0, 0],
